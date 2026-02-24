@@ -24,7 +24,25 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 
 # ─────────────────────────────────────────────
-#  PAGE CONFIG  (must be first Streamlit call)
+# REPORTLAB IMPORTS – MOVED TO TOP LEVEL TO FIX DEPLOYMENT ISSUE
+# ─────────────────────────────────────────────
+REPORTLAB_AVAILABLE = False
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import (
+        SimpleDocTemplate, Table, TableStyle, Paragraph,
+        Spacer, HRFlowable,
+    )
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
+
+# ─────────────────────────────────────────────
+# PAGE CONFIG (must be first Streamlit call)
 # ─────────────────────────────────────────────
 st.set_page_config(
     page_title="EE Lab Grouping System",
@@ -34,15 +52,13 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────
-#  GLOBAL STYLES
+# GLOBAL STYLES
 # ─────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap');
-
 /* ── Reset & Base ── */
 html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
-
 /* ── Sidebar ── */
 section[data-testid="stSidebar"] {
     background: linear-gradient(160deg, #0f1923 0%, #1a2d42 100%);
@@ -70,10 +86,8 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     color: #fff !important;
     font-weight: 600 !important;
 }
-
 /* ── Main area ── */
 .main .block-container { padding-top: 2rem; max-width: 1200px; }
-
 /* ── Custom cards ── */
 .ee-card {
     background: #ffffff;
@@ -91,7 +105,6 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     margin-bottom: 1.25rem;
     color: #c8d8e8;
 }
-
 /* ── Page title ── */
 .page-title {
     font-family: 'Space Mono', monospace;
@@ -107,7 +120,6 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     margin-bottom: 1.5rem;
     font-weight: 400;
 }
-
 /* ── Metric boxes ── */
 .metric-box {
     background: #f8fafc;
@@ -131,7 +143,6 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     margin-top: 0.4rem;
     font-weight: 600;
 }
-
 /* ── Group badges ── */
 .group-badge-a {
     background: #dbeafe; color: #1e40af;
@@ -148,7 +159,6 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     padding: 2px 10px; border-radius: 20px;
     font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em;
 }
-
 /* ── Buttons ── */
 .stButton > button {
     font-family: 'DM Sans', sans-serif !important;
@@ -165,7 +175,6 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     transform: translateY(-1px);
     box-shadow: 0 6px 20px rgba(14,165,233,0.35) !important;
 }
-
 /* ── Form inputs ── */
 .stTextInput input, .stSelectbox select {
     border-radius: 8px !important;
@@ -176,25 +185,21 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     border-color: #0ea5e9 !important;
     box-shadow: 0 0 0 3px rgba(14,165,233,0.12) !important;
 }
-
 /* ── Success / Error ── */
 .stAlert {
     border-radius: 10px !important;
 }
-
 /* ── Tabs ── */
 .stTabs [data-baseweb="tab"] {
     font-family: 'DM Sans', sans-serif !important;
     font-weight: 600 !important;
 }
-
 /* ── Divider ── */
 .ee-divider {
     border: none;
     border-top: 1px solid #e5eaf0;
     margin: 1.5rem 0;
 }
-
 /* ── Hero banner ── */
 .hero-banner {
     background: linear-gradient(135deg, #0f1923 0%, #0c4a6e 50%, #075985 100%);
@@ -226,7 +231,6 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     margin: 0 !important;
     font-weight: 400 !important;
 }
-
 /* ── Admin info boxes ── */
 .info-strip {
     background: #f0f9ff;
@@ -237,24 +241,22 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     font-size: 0.9rem;
     color: #0c4a6e;
 }
-
 /* ── Table styling ── */
 .dataframe { font-size: 0.88rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-#  CONSTANTS & PATHS
+# CONSTANTS & PATHS
 # ─────────────────────────────────────────────
 _BASE = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR    = os.path.join(_BASE, "ee_data")
-BACKUP_DIR  = os.path.join(_BASE, "ee_backups")
-
-STUDENTS_FILE    = os.path.join(DATA_DIR, "students.json")
-MECH_FILE        = os.path.join(DATA_DIR, "mech_groups.json")
-RENEW_FILE       = os.path.join(DATA_DIR, "renew_groups.json")
-STATE_FILE       = os.path.join(DATA_DIR, "app_state.json")
-LOG_FILE         = os.path.join(DATA_DIR, "activity_log.json")
+DATA_DIR = os.path.join(_BASE, "ee_data")
+BACKUP_DIR = os.path.join(_BASE, "ee_backups")
+STUDENTS_FILE = os.path.join(DATA_DIR, "students.json")
+MECH_FILE = os.path.join(DATA_DIR, "mech_groups.json")
+RENEW_FILE = os.path.join(DATA_DIR, "renew_groups.json")
+STATE_FILE = os.path.join(DATA_DIR, "app_state.json")
+LOG_FILE = os.path.join(DATA_DIR, "activity_log.json")
 
 ADMIN_USER = "admin"
 ADMIN_HASH = hashlib.sha256("eelab2024".encode()).hexdigest()
@@ -263,24 +265,22 @@ ADMIN_HASH = hashlib.sha256("eelab2024".encode()).hexdigest()
 MIN_STUDENTS = 3
 
 # ─────────────────────────────────────────────
-#  FILE / DATA UTILITIES
+# FILE / DATA UTILITIES
 # ─────────────────────────────────────────────
-
 def init_storage():
     """Create directories and seed empty data files."""
-    os.makedirs(DATA_DIR,   exist_ok=True)
+    os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(BACKUP_DIR, exist_ok=True)
     defaults = {
         STUDENTS_FILE: [],
-        MECH_FILE:     {"Group A": [], "Group B": []},
-        RENEW_FILE:    {"Group A": [], "Group B": [], "Group C": []},
-        STATE_FILE:    {"last_backup": None, "last_grouping": None, "version": "1.0"},
-        LOG_FILE:      [],
+        MECH_FILE: {"Group A": [], "Group B": []},
+        RENEW_FILE: {"Group A": [], "Group B": [], "Group C": []},
+        STATE_FILE: {"last_backup": None, "last_grouping": None, "version": "1.0"},
+        LOG_FILE: [],
     }
     for path, default in defaults.items():
         if not os.path.exists(path):
             _write(path, default)
-
 
 def _write(path: str, data) -> None:
     """Atomic JSON write via temp file."""
@@ -296,7 +296,6 @@ def _write(path: str, data) -> None:
             except OSError:
                 pass
 
-
 def _read(path: str):
     """Read JSON file; return None on error."""
     try:
@@ -305,14 +304,13 @@ def _read(path: str):
     except (FileNotFoundError, json.JSONDecodeError):
         return None
 
-
 def log_event(event: str, detail: dict = None):
     """Append an event to the activity log (silent on failure)."""
     try:
         logs = _read(LOG_FILE) or []
         logs.append({
-            "event":     event,
-            "detail":    detail or {},
+            "event": event,
+            "detail": detail or {},
             "timestamp": datetime.now().isoformat(),
         })
         if len(logs) > 2000:
@@ -321,18 +319,15 @@ def log_event(event: str, detail: dict = None):
     except Exception:
         pass
 
-
 # ─────────────────────────────────────────────
-#  VALIDATION
+# VALIDATION
 # ─────────────────────────────────────────────
-
 def validate_index(raw: str) -> Tuple[bool, str]:
     """Returns (ok, cleaned_or_error)."""
     cleaned = raw.strip().upper()
     if re.match(r"^STUBTECH\d{6}$", cleaned):
         return True, cleaned
     return False, "Index must be in the format STUBTECH followed by exactly 6 digits (e.g. STUBTECH220457)"
-
 
 def validate_name(raw: str) -> Tuple[bool, str]:
     cleaned = " ".join(raw.strip().split())
@@ -342,10 +337,9 @@ def validate_name(raw: str) -> Tuple[bool, str]:
         return False, "Name should contain only letters, spaces, hyphens, or apostrophes"
     return True, cleaned
 
-
 def check_duplicate(index: str, name: str) -> Tuple[bool, str]:
     students = _read(STUDENTS_FILE) or []
-    idx_set  = {s["index"] for s in students}
+    idx_set = {s["index"] for s in students}
     name_set = {s["name"].lower() for s in students}
     if index in idx_set:
         return True, f"Index **{index}** is already registered."
@@ -353,35 +347,28 @@ def check_duplicate(index: str, name: str) -> Tuple[bool, str]:
         return True, f"A student named **{name}** is already registered."
     return False, ""
 
-
 # ─────────────────────────────────────────────
-#  GROUPING ENGINE
+# GROUPING ENGINE
 # ─────────────────────────────────────────────
-
 def _build_mech_groups(students: List[dict]) -> Dict[str, list]:
     pool = random.sample(students, len(students))
     half = len(pool) // 2
-    rem  = len(pool) % 2
-
+    rem = len(pool) % 2
     def entry(s, letter):
         return {**s, "group": f"Group {letter}", "lab": "Mechatronics Lab", "marks": ""}
-
     return {
         "Group A": [entry(s, "A") for s in pool[:half + rem]],
         "Group B": [entry(s, "B") for s in pool[half + rem:]],
     }
 
-
 def _build_renew_groups(students: List[dict]) -> Dict[str, list]:
-    pool  = random.sample(students, len(students))
-    n     = len(pool)
-    base  = n // 3
-    extra = n % 3          # 0, 1, or 2
+    pool = random.sample(students, len(students))
+    n = len(pool)
+    base = n // 3
+    extra = n % 3  # 0, 1, or 2
     sizes = [base + (1 if i < extra else 0) for i in range(3)]
-
     def entry(s, letter):
         return {**s, "group": f"Group {letter}", "lab": "Renewable Energy Systems Lab", "marks": ""}
-
     idx = 0
     groups = {}
     for letter, size in zip(["A", "B", "C"], sizes):
@@ -389,49 +376,39 @@ def _build_renew_groups(students: List[dict]) -> Dict[str, list]:
         idx += size
     return groups
 
-
 def run_grouping() -> Tuple[bool, str]:
     students = _read(STUDENTS_FILE) or []
     if len(students) < MIN_STUDENTS:
         return False, f"Need at least {MIN_STUDENTS} students to form groups (currently {len(students)})."
-
-    _write(MECH_FILE,  _build_mech_groups(students))
+    _write(MECH_FILE, _build_mech_groups(students))
     _write(RENEW_FILE, _build_renew_groups(students))
-
     state = _read(STATE_FILE) or {}
     state["last_grouping"] = datetime.now().strftime("%d %b %Y, %H:%M")
     _write(STATE_FILE, state)
-
     log_event("groups_generated", {"total": len(students)})
     return True, f"Groups generated for {len(students)} students."
 
-
 # ─────────────────────────────────────────────
-#  BACKUP SYSTEM
+# BACKUP SYSTEM
 # ─────────────────────────────────────────────
-
 def create_backup() -> Tuple[str, bytes]:
     """Returns (label, zip_bytes)."""
     label = datetime.now().strftime("backup_%Y%m%d_%H%M%S")
-    buf   = BytesIO()
+    buf = BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for fname in os.listdir(DATA_DIR):
             if fname.endswith(".json"):
                 zf.write(os.path.join(DATA_DIR, fname), fname)
     raw = buf.getvalue()
-
     # Persist to disk as well
     zip_path = os.path.join(BACKUP_DIR, label + ".zip")
     with open(zip_path, "wb") as f:
         f.write(raw)
-
     state = _read(STATE_FILE) or {}
     state["last_backup"] = datetime.now().strftime("%d %b %Y, %H:%M")
     _write(STATE_FILE, state)
-
     log_event("backup_created", {"label": label})
     return label, raw
-
 
 def list_backups() -> List[Dict]:
     if not os.path.exists(BACKUP_DIR):
@@ -447,7 +424,6 @@ def list_backups() -> List[Dict]:
                 "label": fname.replace("backup_", "").replace(".zip", "").replace("_", " "),
             })
     return items
-
 
 def restore_backup(zip_bytes: bytes) -> Tuple[bool, str]:
     """Restore data files from uploaded zip bytes."""
@@ -466,24 +442,21 @@ def restore_backup(zip_bytes: bytes) -> Tuple[bool, str]:
     except Exception as e:
         return False, f"Restore failed: {e}"
 
-
 # ─────────────────────────────────────────────
-#  EXPORT: EXCEL
+# EXPORT: EXCEL
 # ─────────────────────────────────────────────
-
 def _df_from_groups(groups: Dict[str, list]) -> pd.DataFrame:
     rows = []
     for members in groups.values():
         for m in members:
             rows.append({
                 "Index Number": m.get("index", ""),
-                "Full Name":    m.get("name", ""),
-                "Group":        m.get("group", ""),
-                "Lab":          m.get("lab", ""),
-                "Marks":        m.get("marks", ""),
+                "Full Name": m.get("name", ""),
+                "Group": m.get("group", ""),
+                "Lab": m.get("lab", ""),
+                "Marks": m.get("marks", ""),
             })
     return pd.DataFrame(rows)
-
 
 def export_excel_single(groups: Dict[str, list], lab_name: str) -> bytes:
     """One sheet per group, with a Marks column."""
@@ -491,26 +464,22 @@ def export_excel_single(groups: Dict[str, list], lab_name: str) -> bytes:
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         for group_name, members in groups.items():
             df = pd.DataFrame([{
-                "No.":          i + 1,
+                "No.": i + 1,
                 "Index Number": m["index"],
-                "Full Name":    m["name"],
-                "Marks":        m.get("marks", ""),
+                "Full Name": m["name"],
+                "Marks": m.get("marks", ""),
             } for i, m in enumerate(members)])
             safe_sheet = f"{group_name}"
             df.to_excel(writer, sheet_name=safe_sheet, index=False)
-
             ws = writer.sheets[safe_sheet]
             # Column widths
             for col in ws.columns:
                 max_w = max((len(str(c.value or "")) for c in col), default=10)
                 ws.column_dimensions[col[0].column_letter].width = min(max_w + 4, 50)
-
         # Summary sheet
         summary_df = _df_from_groups(groups)
         summary_df.to_excel(writer, sheet_name="All Groups", index=False)
-
     return buf.getvalue()
-
 
 def export_excel_all(mech: Dict, renew: Dict) -> bytes:
     """All groups across both labs in one Excel workbook."""
@@ -519,10 +488,10 @@ def export_excel_all(mech: Dict, renew: Dict) -> bytes:
         # Mechatronics sheets
         for group_name, members in mech.items():
             df = pd.DataFrame([{
-                "No.":          i + 1,
+                "No.": i + 1,
                 "Index Number": m["index"],
-                "Full Name":    m["name"],
-                "Marks":        m.get("marks", ""),
+                "Full Name": m["name"],
+                "Marks": m.get("marks", ""),
             } for i, m in enumerate(members)])
             sheet = f"Mech {group_name}"
             df.to_excel(writer, sheet_name=sheet, index=False)
@@ -530,14 +499,13 @@ def export_excel_all(mech: Dict, renew: Dict) -> bytes:
             for col in ws.columns:
                 w = max((len(str(c.value or "")) for c in col), default=10)
                 ws.column_dimensions[col[0].column_letter].width = min(w + 4, 45)
-
         # Renewable sheets
         for group_name, members in renew.items():
             df = pd.DataFrame([{
-                "No.":          i + 1,
+                "No.": i + 1,
                 "Index Number": m["index"],
-                "Full Name":    m["name"],
-                "Marks":        m.get("marks", ""),
+                "Full Name": m["name"],
+                "Marks": m.get("marks", ""),
             } for i, m in enumerate(members)])
             sheet = f"Renew {group_name}"
             df.to_excel(writer, sheet_name=sheet, index=False)
@@ -545,50 +513,31 @@ def export_excel_all(mech: Dict, renew: Dict) -> bytes:
             for col in ws.columns:
                 w = max((len(str(c.value or "")) for c in col), default=10)
                 ws.column_dimensions[col[0].column_letter].width = min(w + 4, 45)
-
         # Master summary
         all_df = pd.concat([_df_from_groups(mech), _df_from_groups(renew)], ignore_index=True)
         all_df.to_excel(writer, sheet_name="Master List", index=False)
-
     return buf.getvalue()
 
-
 # ─────────────────────────────────────────────
-#  EXPORT: PDF  (pure Python via reportlab)
+# EXPORT: PDF
 # ─────────────────────────────────────────────
-
 def export_pdf(groups: Dict[str, list], lab_title: str) -> bytes:
     """
     Generate a formatted, printable PDF for one lab's groups.
-
-    Fixes applied vs original:
-      - Imports moved to module level (no lazy import / ImportError swallowing)
-      - buf.getvalue() used instead of buf.seek(0)+buf.read() — getvalue() always
-        returns the full buffer contents regardless of the internal pointer position
-      - Empty-group guard: a header-only table is shown when a group has no members
-        so doc.build() never receives a zero-row Table (which can crash ReportLab)
-      - Removed the b'%PDF stub' fallback that produced a 29-byte non-PDF file
     """
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib import colors
-    from reportlab.lib.units import cm
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.platypus import (
-        SimpleDocTemplate, Table, TableStyle, Paragraph,
-        Spacer, HRFlowable,
-    )
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    if not REPORTLAB_AVAILABLE:
+        st.error("PDF generation is not available — reportlab library is missing.")
+        return b""
 
-    buf  = BytesIO()
-    doc  = SimpleDocTemplate(
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
         buf, pagesize=A4,
         topMargin=2*cm, bottomMargin=2*cm,
         leftMargin=2*cm, rightMargin=2*cm,
     )
-
     styles = getSampleStyleSheet()
-    NAVY   = colors.HexColor("#0f1923")
-    SKY    = colors.HexColor("#0ea5e9")
+    NAVY = colors.HexColor("#0f1923")
+    SKY = colors.HexColor("#0ea5e9")
     STRIPE = colors.HexColor("#f8fafc")
 
     title_style = ParagraphStyle(
@@ -618,7 +567,7 @@ def export_pdf(groups: Dict[str, list], lab_title: str) -> bytes:
     story.append(Paragraph("STUBTECH — Electrical Engineering Department", sub_style))
     story.append(Paragraph(lab_title, title_style))
     story.append(Paragraph(
-        f"Lab Groupings  ·  Generated: {datetime.now().strftime('%d %B %Y, %H:%M')}",
+        f"Lab Groupings · Generated: {datetime.now().strftime('%d %B %Y, %H:%M')}",
         sub_style,
     ))
     story.append(HRFlowable(width="100%", thickness=2, color=SKY, spaceAfter=12))
@@ -651,26 +600,26 @@ def export_pdf(groups: Dict[str, list], lab_title: str) -> bytes:
 
         t.setStyle(TableStyle([
             # Header row
-            ("BACKGROUND",    (0, 0), (-1, 0), NAVY),
-            ("TEXTCOLOR",     (0, 0), (-1, 0), colors.white),
-            ("FONTNAME",      (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE",      (0, 0), (-1, 0), 10),
-            ("ALIGN",         (0, 0), (-1, 0), "CENTER"),
-            ("TOPPADDING",    (0, 0), (-1, 0), 8),
+            ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 10),
+            ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+            ("TOPPADDING", (0, 0), (-1, 0), 8),
             ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
             # Body rows
-            ("FONTNAME",      (0, 1), (-1, -1), "Helvetica"),
-            ("FONTSIZE",      (0, 1), (-1, -1), 9),
-            ("ALIGN",         (0, 1), (1, -1),  "CENTER"),
-            ("ALIGN",         (2, 1), (2, -1),  "LEFT"),
-            ("ALIGN",         (3, 1), (3, -1),  "CENTER"),
-            ("TOPPADDING",    (0, 1), (-1, -1), 6),
+            ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+            ("FONTSIZE", (0, 1), (-1, -1), 9),
+            ("ALIGN", (0, 1), (1, -1), "CENTER"),
+            ("ALIGN", (2, 1), (2, -1), "LEFT"),
+            ("ALIGN", (3, 1), (3, -1), "CENTER"),
+            ("TOPPADDING", (0, 1), (-1, -1), 6),
             ("BOTTOMPADDING", (0, 1), (-1, -1), 6),
-            ("LEFTPADDING",   (0, 0), (-1, -1), 8),
-            ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
             # Borders
-            ("GRID",          (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
-            ("LINEBELOW",     (0, 0), (-1, 0),  1.5, SKY),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+            ("LINEBELOW", (0, 0), (-1, 0), 1.5, SKY),
             *row_bg,
         ]))
 
@@ -682,27 +631,22 @@ def export_pdf(groups: Dict[str, list], lab_title: str) -> bytes:
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
     story.append(Spacer(1, 0.2*cm))
     story.append(Paragraph(
-        f"Total students: {sum(len(m) for m in groups.values())}  "
-        f"·  Groups: {len(groups)}  "
-        f"·  EE Lab Grouping System v1.0",
+        f"Total students: {sum(len(m) for m in groups.values())} "
+        f"· Groups: {len(groups)} "
+        f"· EE Lab Grouping System v1.0",
         footer_style,
     ))
 
     doc.build(story)
-
-    # ── FIX: getvalue() returns the complete buffer regardless of pointer position ──
     return buf.getvalue()
 
-
 # ─────────────────────────────────────────────
-#  AUTHENTICATION
+# AUTHENTICATION
 # ─────────────────────────────────────────────
-
 def admin_login_ui():
     st.markdown('<div class="page-title">Admin Login</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-subtitle">Enter your credentials to access the admin dashboard</div>',
                 unsafe_allow_html=True)
-
     with st.form("admin_login"):
         username = st.text_input("Username", placeholder="admin")
         password = st.text_input("Password", type="password", placeholder="••••••••")
@@ -724,11 +668,9 @@ def admin_login_ui():
     </div>
     """, unsafe_allow_html=True)
 
-
 # ─────────────────────────────────────────────
-#  STUDENT REGISTRATION PAGE
+# STUDENT REGISTRATION PAGE
 # ─────────────────────────────────────────────
-
 def student_page():
     # Hero banner
     st.markdown("""
@@ -744,25 +686,21 @@ def student_page():
         st.markdown('<div class="ee-card">', unsafe_allow_html=True)
         st.markdown("### 📝 Student Registration")
         st.markdown("Fill in your details to register for lab assignments.")
-
         with st.form("student_reg", clear_on_submit=True):
-            name_input  = st.text_input("Full Name",     placeholder="e.g. Kwame Asante Mensah")
-            index_input = st.text_input("Index Number",  placeholder="e.g. STUBTECH220457")
-            submitted   = st.form_submit_button("✅ Register", use_container_width=True, type="primary")
+            name_input = st.text_input("Full Name", placeholder="e.g. Kwame Asante Mensah")
+            index_input = st.text_input("Index Number", placeholder="e.g. STUBTECH220457")
+            submitted = st.form_submit_button("✅ Register", use_container_width=True, type="primary")
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Handle submission OUTSIDE form to avoid Streamlit nesting issues
+        # Handle submission OUTSIDE form
         if submitted:
             errors = []
-
             ok_name, name_result = validate_name(name_input)
             if not ok_name:
                 errors.append(f"**Name:** {name_result}")
-
             ok_idx, idx_result = validate_index(index_input)
             if not ok_idx:
                 errors.append(f"**Index:** {idx_result}")
-
             if errors:
                 for e in errors:
                     st.error(e)
@@ -773,16 +711,14 @@ def student_page():
                 else:
                     students = _read(STUDENTS_FILE) or []
                     students.append({
-                        "name":  name_result,
+                        "name": name_result,
                         "index": idx_result,
                         "registered_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     })
                     _write(STUDENTS_FILE, students)
-
                     # Auto-regroup whenever a new student joins
                     if len(students) >= MIN_STUDENTS:
                         run_grouping()
-
                     log_event("student_registered", {"index": idx_result, "total": len(students)})
                     st.success(f"🎉 Welcome, **{name_result}**! You've been registered successfully.")
                     st.balloons()
@@ -790,14 +726,13 @@ def student_page():
 
     with col_info:
         students = _read(STUDENTS_FILE) or []
-        mech     = _read(MECH_FILE)  or {}
-        renew    = _read(RENEW_FILE) or {}
-        state    = _read(STATE_FILE) or {}
+        mech = _read(MECH_FILE) or {}
+        renew = _read(RENEW_FILE) or {}
+        state = _read(STATE_FILE) or {}
 
         # Stats
         st.markdown('<div class="ee-card">', unsafe_allow_html=True)
         st.markdown("### 📊 Current Stats")
-
         cols = st.columns(2)
         with cols[0]:
             st.markdown(f"""
@@ -812,7 +747,6 @@ def student_page():
                 <div class="metric-value">{n_groups}</div>
                 <div class="metric-label">Active Groups</div>
             </div>""", unsafe_allow_html=True)
-
         if state.get("last_grouping"):
             st.markdown(f"<br>🕐 Last grouped: **{state['last_grouping']}**", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -826,7 +760,7 @@ def student_page():
             if lookup:
                 ok, clean = validate_index(lookup)
                 if ok:
-                    found_mech  = next((m["group"] for g in mech.values()  for m in g if m["index"] == clean), None)
+                    found_mech = next((m["group"] for g in mech.values() for m in g if m["index"] == clean), None)
                     found_renew = next((m["group"] for g in renew.values() for m in g if m["index"] == clean), None)
                     if found_mech or found_renew:
                         if found_mech:
@@ -850,17 +784,15 @@ def student_page():
                 st.markdown(f"• **{s['name']}** `{s['index']}`")
             st.markdown('</div>', unsafe_allow_html=True)
 
-
 # ─────────────────────────────────────────────
-#  ADMIN DASHBOARD
+# ADMIN DASHBOARD
 # ─────────────────────────────────────────────
-
 def admin_page():
     students = _read(STUDENTS_FILE) or []
-    mech     = _read(MECH_FILE)  or {}
-    renew    = _read(RENEW_FILE) or {}
-    state    = _read(STATE_FILE) or {}
-    logs     = _read(LOG_FILE)   or []
+    mech = _read(MECH_FILE) or {}
+    renew = _read(RENEW_FILE) or {}
+    state = _read(STATE_FILE) or {}
+    logs = _read(LOG_FILE) or []
 
     # ── Sidebar admin nav ──
     st.sidebar.markdown("---")
@@ -871,7 +803,6 @@ def admin_page():
          "👤 Student List", "📋 Activity Log"],
         label_visibility="collapsed",
     )
-
     if st.sidebar.button("🚪 Logout", use_container_width=True):
         st.session_state["admin_auth"] = False
         st.rerun()
@@ -882,14 +813,13 @@ def admin_page():
         st.markdown('<div class="page-subtitle">Overview of lab registrations and groupings</div>',
                     unsafe_allow_html=True)
 
-        total_mech  = sum(len(v) for v in mech.values())
+        total_mech = sum(len(v) for v in mech.values())
         total_renew = sum(len(v) for v in renew.values())
-
         c1, c2, c3, c4, c5 = st.columns(5)
         for col, val, label in [
-            (c1, len(students),               "Total Students"),
-            (c2, total_mech,                  "Mech. Students"),
-            (c3, total_renew,                 "Renew. Students"),
+            (c1, len(students), "Total Students"),
+            (c2, total_mech, "Mech. Students"),
+            (c3, total_renew, "Renew. Students"),
             (c4, state.get("last_backup") or "—", "Last Backup"),
             (c5, state.get("last_grouping") or "—", "Last Grouped"),
         ]:
@@ -903,18 +833,16 @@ def admin_page():
         st.markdown("<hr class='ee-divider'>", unsafe_allow_html=True)
 
         col_mech, col_renew = st.columns(2)
-
         with col_mech:
             st.markdown("#### 🔧 Mechatronics Lab")
             for gname, members in mech.items():
                 badge = "group-badge-a" if "A" in gname else "group-badge-b"
                 st.markdown(f"<span class='{badge}'>{gname}</span> — **{len(members)} students**",
                             unsafe_allow_html=True)
-
         with col_renew:
             st.markdown("#### 🌱 Renewable Energy Systems Lab")
             for gname, members in renew.items():
-                ltr   = gname[-1]
+                ltr = gname[-1]
                 badge = {"A": "group-badge-a", "B": "group-badge-b", "C": "group-badge-c"}.get(ltr, "group-badge-a")
                 st.markdown(f"<span class='{badge}'>{gname}</span> — **{len(members)} students**",
                             unsafe_allow_html=True)
@@ -922,7 +850,6 @@ def admin_page():
         st.markdown("<hr class='ee-divider'>", unsafe_allow_html=True)
         st.markdown("#### ⚡ Quick Actions")
         qa1, qa2, qa3 = st.columns(3)
-
         with qa1:
             if st.button("🔄 Re-generate Groups", use_container_width=True, type="primary"):
                 ok, msg = run_grouping()
@@ -931,7 +858,6 @@ def admin_page():
                     st.rerun()
                 else:
                     st.warning(msg)
-
         with qa2:
             if st.button("💾 Create Backup Now", use_container_width=True):
                 label, raw = create_backup()
@@ -943,7 +869,6 @@ def admin_page():
                     mime="application/zip",
                     key="quick_backup_dl"
                 )
-
         with qa3:
             if st.button("📤 Export All (Excel)", use_container_width=True):
                 xl = export_excel_all(mech, renew)
@@ -958,7 +883,6 @@ def admin_page():
     # ─── GROUPS ──────────────────────────────────────────────────
     elif section == "👥 Groups":
         st.markdown('<div class="page-title">👥 Lab Groups</div>', unsafe_allow_html=True)
-
         if not students:
             st.info("No students registered yet.")
             return
@@ -987,7 +911,7 @@ def admin_page():
             badge_map = {"A": "group-badge-a", "B": "group-badge-b", "C": "group-badge-c"}
             for i, (gname, members) in enumerate(renew.items()):
                 with cols[i]:
-                    ltr   = gname[-1]
+                    ltr = gname[-1]
                     badge = badge_map.get(ltr, "group-badge-a")
                     st.markdown(f"<span class='{badge}'>{gname}</span> &nbsp; ({len(members)} students)",
                                 unsafe_allow_html=True)
@@ -1044,14 +968,17 @@ def admin_page():
                     use_container_width=True,
                 )
             with c2:
-                pdf_mech = export_pdf(mech, "Mechatronics Lab")
-                st.download_button(
-                    "📄 Download PDF (Mechatronics)",
-                    data=pdf_mech,
-                    file_name=f"Mechatronics_Groups_{datetime.now().strftime('%Y%m%d')}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                )
+                if REPORTLAB_AVAILABLE:
+                    pdf_mech = export_pdf(mech, "Mechatronics Lab")
+                    st.download_button(
+                        "📄 Download PDF (Mechatronics)",
+                        data=pdf_mech,
+                        file_name=f"Mechatronics_Groups_{datetime.now().strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+                else:
+                    st.warning("PDF export unavailable – reportlab not installed")
 
             st.markdown("<hr class='ee-divider'>", unsafe_allow_html=True)
             st.markdown("**Preview**")
@@ -1090,14 +1017,17 @@ def admin_page():
                     use_container_width=True,
                 )
             with c2:
-                pdf_renew = export_pdf(renew, "Renewable Energy Systems Lab")
-                st.download_button(
-                    "📄 Download PDF (Renewable Energy)",
-                    data=pdf_renew,
-                    file_name=f"Renewable_Groups_{datetime.now().strftime('%Y%m%d')}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                )
+                if REPORTLAB_AVAILABLE:
+                    pdf_renew = export_pdf(renew, "Renewable Energy Systems Lab")
+                    st.download_button(
+                        "📄 Download PDF (Renewable Energy)",
+                        data=pdf_renew,
+                        file_name=f"Renewable_Groups_{datetime.now().strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+                else:
+                    st.warning("PDF export unavailable – reportlab not installed")
 
             st.markdown("<hr class='ee-divider'>", unsafe_allow_html=True)
             st.markdown("**Preview**")
@@ -1158,7 +1088,7 @@ def admin_page():
                     # Auto-backup before clearing
                     create_backup()
                     _write(STUDENTS_FILE, [])
-                    _write(MECH_FILE,  {"Group A": [], "Group B": []})
+                    _write(MECH_FILE, {"Group A": [], "Group B": []})
                     _write(RENEW_FILE, {"Group A": [], "Group B": [], "Group C": []})
                     log_event("data_cleared", {})
                     st.success("All data cleared. An automatic backup was saved first.")
@@ -1192,10 +1122,9 @@ def admin_page():
             server_backups = list_backups()
             if server_backups:
                 opts = [b["name"] for b in server_backups]
-                sel  = st.selectbox("Select a server backup", opts)
+                sel = st.selectbox("Select a server backup", opts)
                 sel_backup = next(b for b in server_backups if b["name"] == sel)
-                st.caption(f"Size: {sel_backup['size_kb']} KB  •  {sel_backup['label']}")
-
+                st.caption(f"Size: {sel_backup['size_kb']} KB • {sel_backup['label']}")
                 confirm_srv = st.checkbox("Confirm restore from server backup", key="confirm_srv")
                 if confirm_srv:
                     if st.button("🔄 Restore Selected", type="secondary"):
@@ -1238,7 +1167,6 @@ def admin_page():
     # ─── STUDENT LIST ────────────────────────────────────────────
     elif section == "👤 Student List":
         st.markdown('<div class="page-title">👤 Student List</div>', unsafe_allow_html=True)
-
         if not students:
             st.info("No students registered yet.")
             return
@@ -1269,7 +1197,10 @@ def admin_page():
                 mime="text/csv",
             )
         with c2:
-            xl = to_excel(df_students)
+            buf = BytesIO()
+            with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+                df_students.to_excel(writer, index=True)
+            xl = buf.getvalue()
             st.download_button(
                 "📊 Download as Excel",
                 data=xl,
@@ -1309,7 +1240,7 @@ def admin_page():
 
         # Filter
         event_types = sorted(df_log["event"].unique().tolist())
-        sel_events  = st.multiselect("Filter by event type", event_types, default=event_types)
+        sel_events = st.multiselect("Filter by event type", event_types, default=event_types)
         df_log = df_log[df_log["event"].isin(sel_events)]
 
         st.dataframe(
@@ -1317,9 +1248,9 @@ def admin_page():
             use_container_width=True,
             hide_index=True,
             column_config={
-                "date":   "Date",
-                "time":   "Time",
-                "event":  "Event",
+                "date": "Date",
+                "time": "Time",
+                "event": "Event",
                 "detail": st.column_config.JsonColumn("Detail"),
             },
         )
@@ -1331,26 +1262,9 @@ def admin_page():
         summary.columns = ["Event", "Count"]
         st.dataframe(summary, use_container_width=True, hide_index=True)
 
-
 # ─────────────────────────────────────────────
-#  HELPER: DataFrame → Excel bytes
+# SIDEBAR SHARED UI
 # ─────────────────────────────────────────────
-
-def to_excel(df: pd.DataFrame) -> bytes:
-    buf = BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        df.to_excel(writer, index=True)
-        ws = writer.sheets["Sheet1"]
-        for col in ws.columns:
-            w = max((len(str(c.value or "")) for c in col), default=10)
-            ws.column_dimensions[col[0].column_letter].width = min(w + 4, 50)
-    return buf.getvalue()
-
-
-# ─────────────────────────────────────────────
-#  SIDEBAR SHARED UI
-# ─────────────────────────────────────────────
-
 def sidebar_ui() -> str:
     with st.sidebar:
         st.markdown("""
@@ -1369,7 +1283,7 @@ def sidebar_ui() -> str:
         st.markdown("---")
 
         page = "Student"
-        if st.button("🎓 Student Portal",  use_container_width=True,
+        if st.button("🎓 Student Portal", use_container_width=True,
                      type="primary" if st.session_state.get("nav") == "Student" else "secondary"):
             st.session_state["nav"] = "Student"
             st.session_state["admin_auth"] = False
@@ -1396,20 +1310,17 @@ def sidebar_ui() -> str:
         st.markdown("---")
         st.markdown("""
         <div style="font-size:0.72rem; color:#4a7a9b; text-align:center; padding-bottom:0.5rem;">
-            © 2024 EE Lab Grouping System<br>v1.0 — Streamlit Cloud Edition
+            © 2024–2026 EE Lab Grouping System<br>v1.0 — Streamlit Cloud Edition
         </div>
         """, unsafe_allow_html=True)
 
     return st.session_state.get("nav", "Student")
 
-
 # ─────────────────────────────────────────────
-#  MAIN ENTRY POINT
+# MAIN ENTRY POINT
 # ─────────────────────────────────────────────
-
 def main():
     init_storage()
-
     nav = sidebar_ui()
 
     if nav == "Admin":
@@ -1419,7 +1330,6 @@ def main():
             admin_login_ui()
     else:
         student_page()
-
 
 if __name__ == "__main__":
     main()
