@@ -708,11 +708,6 @@ def admin_login_ui():
             st.error("❌ Invalid username or password")
             log_event("admin_login_failed", {"user": username})
 
-    st.markdown("""
-    <div class="info-strip" style="margin-top:1rem;">
-        ℹ️ Default credentials → <strong>Username:</strong> admin &nbsp;|&nbsp; <strong>Password:</strong> eelab2024
-    </div>
-    """, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────
