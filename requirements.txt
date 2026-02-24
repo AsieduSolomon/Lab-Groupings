@@ -3,3 +3,4 @@ pandas
 numpy
 plotly    # or >=5.0.0 – any recent version works fine
 openpyxl           # already needed for your Excel exports
+reportlab
