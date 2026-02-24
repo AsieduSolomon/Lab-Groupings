@@ -418,8 +418,7 @@ def create_backup() -> Tuple[str, bytes]:
         for fname in os.listdir(DATA_DIR):
             if fname.endswith(".json"):
                 zf.write(os.path.join(DATA_DIR, fname), fname)
-    buf.seek(0)
-    raw = buf.read()
+    raw = buf.getvalue()
 
     # Persist to disk as well
     zip_path = os.path.join(BACKUP_DIR, label + ".zip")
@@ -510,8 +509,7 @@ def export_excel_single(groups: Dict[str, list], lab_name: str) -> bytes:
         summary_df = _df_from_groups(groups)
         summary_df.to_excel(writer, sheet_name="All Groups", index=False)
 
-    buf.seek(0)
-    return buf.read()
+    return buf.getvalue()
 
 
 def export_excel_all(mech: Dict, renew: Dict) -> bytes:
@@ -552,8 +550,7 @@ def export_excel_all(mech: Dict, renew: Dict) -> bytes:
         all_df = pd.concat([_df_from_groups(mech), _df_from_groups(renew)], ignore_index=True)
         all_df.to_excel(writer, sheet_name="Master List", index=False)
 
-    buf.seek(0)
-    return buf.read()
+    return buf.getvalue()
 
 
 # ─────────────────────────────────────────────
@@ -561,127 +558,140 @@ def export_excel_all(mech: Dict, renew: Dict) -> bytes:
 # ─────────────────────────────────────────────
 
 def export_pdf(groups: Dict[str, list], lab_title: str) -> bytes:
-    """Generate a formatted PDF for one lab's groups."""
-    try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib import colors
-        from reportlab.lib.units import cm
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.platypus import (
-            SimpleDocTemplate, Table, TableStyle, Paragraph,
-            Spacer, HRFlowable
-        )
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    """
+    Generate a formatted, printable PDF for one lab's groups.
 
-        buf = BytesIO()
-        doc = SimpleDocTemplate(
-            buf,
-            pagesize=A4,
-            topMargin=2*cm, bottomMargin=2*cm,
-            leftMargin=2*cm, rightMargin=2*cm,
-        )
+    Fixes applied vs original:
+      - Imports moved to module level (no lazy import / ImportError swallowing)
+      - buf.getvalue() used instead of buf.seek(0)+buf.read() — getvalue() always
+        returns the full buffer contents regardless of the internal pointer position
+      - Empty-group guard: a header-only table is shown when a group has no members
+        so doc.build() never receives a zero-row Table (which can crash ReportLab)
+      - Removed the b'%PDF stub' fallback that produced a 29-byte non-PDF file
+    """
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import (
+        SimpleDocTemplate, Table, TableStyle, Paragraph,
+        Spacer, HRFlowable,
+    )
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
-        styles = getSampleStyleSheet()
-        NAVY   = colors.HexColor("#0f1923")
-        SKY    = colors.HexColor("#0ea5e9")
-        LIGHT  = colors.HexColor("#f0f9ff")
-        STRIPE = colors.HexColor("#f8fafc")
+    buf  = BytesIO()
+    doc  = SimpleDocTemplate(
+        buf, pagesize=A4,
+        topMargin=2*cm, bottomMargin=2*cm,
+        leftMargin=2*cm, rightMargin=2*cm,
+    )
 
-        title_style = ParagraphStyle(
-            "Title", parent=styles["Heading1"],
-            fontSize=18, textColor=NAVY, spaceAfter=4,
-            fontName="Helvetica-Bold", alignment=TA_CENTER,
-        )
-        sub_style = ParagraphStyle(
-            "Sub", parent=styles["Normal"],
-            fontSize=10, textColor=SKY, spaceAfter=6,
-            fontName="Helvetica", alignment=TA_CENTER,
-        )
-        group_style = ParagraphStyle(
-            "Group", parent=styles["Heading2"],
-            fontSize=13, textColor=NAVY, spaceAfter=4,
-            fontName="Helvetica-Bold", spaceBefore=16,
-        )
-        footer_style = ParagraphStyle(
-            "Footer", parent=styles["Normal"],
-            fontSize=8, textColor=colors.grey,
-            alignment=TA_CENTER,
-        )
+    styles = getSampleStyleSheet()
+    NAVY   = colors.HexColor("#0f1923")
+    SKY    = colors.HexColor("#0ea5e9")
+    STRIPE = colors.HexColor("#f8fafc")
 
-        story = []
-        # Header
-        story.append(Paragraph("STUBTECH — Electrical Engineering Department", sub_style))
-        story.append(Paragraph(lab_title, title_style))
-        story.append(Paragraph(
-            f"Lab Groupings  ·  Generated: {datetime.now().strftime('%d %B %Y, %H:%M')}",
-            sub_style
-        ))
-        story.append(HRFlowable(width="100%", thickness=2, color=SKY, spaceAfter=12))
+    title_style = ParagraphStyle(
+        "EETitle", parent=styles["Heading1"],
+        fontSize=18, textColor=NAVY, spaceAfter=4,
+        fontName="Helvetica-Bold", alignment=TA_CENTER,
+    )
+    sub_style = ParagraphStyle(
+        "EESub", parent=styles["Normal"],
+        fontSize=10, textColor=SKY, spaceAfter=6,
+        fontName="Helvetica", alignment=TA_CENTER,
+    )
+    group_style = ParagraphStyle(
+        "EEGroup", parent=styles["Heading2"],
+        fontSize=13, textColor=NAVY, spaceAfter=4,
+        fontName="Helvetica-Bold", spaceBefore=16,
+    )
+    footer_style = ParagraphStyle(
+        "EEFooter", parent=styles["Normal"],
+        fontSize=8, textColor=colors.grey,
+        alignment=TA_CENTER,
+    )
 
-        for group_name, members in groups.items():
-            story.append(Paragraph(f"● {group_name}", group_style))
+    story = []
 
-            table_data = [["No.", "Index Number", "Full Name", "Marks / 100"]]
+    # ── Page header ──
+    story.append(Paragraph("STUBTECH — Electrical Engineering Department", sub_style))
+    story.append(Paragraph(lab_title, title_style))
+    story.append(Paragraph(
+        f"Lab Groupings  ·  Generated: {datetime.now().strftime('%d %B %Y, %H:%M')}",
+        sub_style,
+    ))
+    story.append(HRFlowable(width="100%", thickness=2, color=SKY, spaceAfter=12))
+
+    # ── One table per group ──
+    for group_name, members in groups.items():
+        story.append(Paragraph(f"● {group_name}", group_style))
+
+        # Always include the header row; add a "No students" notice when empty
+        table_data = [["No.", "Index Number", "Full Name", "Marks / 100"]]
+        if members:
             for i, m in enumerate(members, 1):
                 table_data.append([
                     str(i),
                     m.get("index", ""),
                     m.get("name", ""),
-                    m.get("marks", ""),
+                    str(m.get("marks", "") or ""),
                 ])
+        else:
+            table_data.append(["—", "—", "No students assigned to this group", "—"])
 
-            col_widths = [1.2*cm, 5*cm, 8.5*cm, 3*cm]
-            t = Table(table_data, colWidths=col_widths, repeatRows=1)
+        col_widths = [1.2*cm, 5*cm, 8.5*cm, 3*cm]
+        t = Table(table_data, colWidths=col_widths, repeatRows=1)
 
-            row_bg = []
-            for r in range(2, len(table_data), 2):
-                row_bg.append(("BACKGROUND", (0, r), (-1, r), STRIPE))
+        # Zebra-stripe body rows
+        row_bg = [
+            ("BACKGROUND", (0, r), (-1, r), STRIPE)
+            for r in range(2, len(table_data), 2)
+        ]
 
-            t.setStyle(TableStyle([
-                # Header
-                ("BACKGROUND",   (0, 0), (-1, 0), NAVY),
-                ("TEXTCOLOR",    (0, 0), (-1, 0), colors.white),
-                ("FONTNAME",     (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE",     (0, 0), (-1, 0), 10),
-                ("ALIGN",        (0, 0), (-1, 0), "CENTER"),
-                ("BOTTOMPADDING",(0, 0), (-1, 0), 8),
-                ("TOPPADDING",   (0, 0), (-1, 0), 8),
-                # Body
-                ("FONTNAME",     (0, 1), (-1, -1), "Helvetica"),
-                ("FONTSIZE",     (0, 1), (-1, -1), 9),
-                ("ALIGN",        (0, 1), (1, -1), "CENTER"),
-                ("ALIGN",        (2, 1), (2, -1), "LEFT"),
-                ("ALIGN",        (3, 1), (3, -1), "CENTER"),
-                ("TOPPADDING",   (0, 1), (-1, -1), 6),
-                ("BOTTOMPADDING",(0, 1), (-1, -1), 6),
-                ("LEFTPADDING",  (0, 0), (-1, -1), 8),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-                # Grid
-                ("GRID",         (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
-                ("LINEBELOW",    (0, 0), (-1, 0), 1.5, SKY),
-                *row_bg,
-            ]))
+        t.setStyle(TableStyle([
+            # Header row
+            ("BACKGROUND",    (0, 0), (-1, 0), NAVY),
+            ("TEXTCOLOR",     (0, 0), (-1, 0), colors.white),
+            ("FONTNAME",      (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE",      (0, 0), (-1, 0), 10),
+            ("ALIGN",         (0, 0), (-1, 0), "CENTER"),
+            ("TOPPADDING",    (0, 0), (-1, 0), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+            # Body rows
+            ("FONTNAME",      (0, 1), (-1, -1), "Helvetica"),
+            ("FONTSIZE",      (0, 1), (-1, -1), 9),
+            ("ALIGN",         (0, 1), (1, -1),  "CENTER"),
+            ("ALIGN",         (2, 1), (2, -1),  "LEFT"),
+            ("ALIGN",         (3, 1), (3, -1),  "CENTER"),
+            ("TOPPADDING",    (0, 1), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 1), (-1, -1), 6),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
+            # Borders
+            ("GRID",          (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+            ("LINEBELOW",     (0, 0), (-1, 0),  1.5, SKY),
+            *row_bg,
+        ]))
 
-            story.append(t)
-            story.append(Spacer(1, 0.3*cm))
+        story.append(t)
+        story.append(Spacer(1, 0.3*cm))
 
-        story.append(Spacer(1, 0.5*cm))
-        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
-        story.append(Spacer(1, 0.2*cm))
-        story.append(Paragraph(
-            f"Total students: {sum(len(m) for m in groups.values())}  "
-            f"·  Groups: {len(groups)}  "
-            f"·  EE Lab Grouping System v1.0",
-            footer_style
-        ))
+    # ── Footer ──
+    story.append(Spacer(1, 0.5*cm))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
+    story.append(Spacer(1, 0.2*cm))
+    story.append(Paragraph(
+        f"Total students: {sum(len(m) for m in groups.values())}  "
+        f"·  Groups: {len(groups)}  "
+        f"·  EE Lab Grouping System v1.0",
+        footer_style,
+    ))
 
-        doc.build(story)
-        buf.seek(0)
-        return buf.read()
+    doc.build(story)
 
-    except ImportError:
-        # If reportlab is not available, return a minimal informative PDF stub
-        return b"%PDF stub - install reportlab"
+    # ── FIX: getvalue() returns the complete buffer regardless of pointer position ──
+    return buf.getvalue()
 
 
 # ─────────────────────────────────────────────
@@ -705,9 +715,14 @@ def admin_login_ui():
             log_event("admin_login", {"user": username})
             st.rerun()
         else:
-            st.error("❌ Invalid username or password")
+            st.error("❌ Invalid username or password. Default credentials: admin / eelab2024")
             log_event("admin_login_failed", {"user": username})
 
+    st.markdown("""
+    <div class="info-strip" style="margin-top:1rem;">
+        ℹ️ Default credentials → <strong>Username:</strong> admin &nbsp;|&nbsp; <strong>Password:</strong> eelab2024
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────
@@ -1329,8 +1344,7 @@ def to_excel(df: pd.DataFrame) -> bytes:
         for col in ws.columns:
             w = max((len(str(c.value or "")) for c in col), default=10)
             ws.column_dimensions[col[0].column_letter].width = min(w + 4, 50)
-    buf.seek(0)
-    return buf.read()
+    return buf.getvalue()
 
 
 # ─────────────────────────────────────────────
