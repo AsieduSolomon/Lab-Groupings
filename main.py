@@ -705,7 +705,7 @@ def admin_login_ui():
             log_event("admin_login", {"user": username})
             st.rerun()
         else:
-            st.error("❌ Invalid username or password. Default credentials: admin / eelab2024")
+            st.error("❌ Invalid username or password")
             log_event("admin_login_failed", {"user": username})
 
     st.markdown("""
